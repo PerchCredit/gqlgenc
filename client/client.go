@@ -41,9 +41,8 @@ func NewClient(client *http.Client, baseURL string, options ...HTTPRequestOption
 
 func (c *Client) newRequest(ctx context.Context, operationName, query string, vars map[string]interface{}, httpRequestOptions []HTTPRequestOption) (*http.Request, error) {
 	r := &Request{
-		Query:         query,
-		Variables:     vars,
-		OperationName: operationName,
+		Query:     query,
+		Variables: vars,
 	}
 
 	requestBody, err := json.Marshal(r)
