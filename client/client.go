@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/Yamashou/gqlgenc/graphqljson"
+	"github.com/perchcredit/gqlgenc/graphqljson"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"golang.org/x/xerrors"
 )
