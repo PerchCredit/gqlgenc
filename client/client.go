@@ -8,6 +8,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/aws/aws-sdk-go/aws"
+	session "github.com/aws/aws-sdk-go/aws/session"
+	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/perchcredit/gqlgenc/graphqljson"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"golang.org/x/xerrors"
@@ -16,11 +19,22 @@ import (
 // HTTPRequestOption represents the options applicable to the http client
 type HTTPRequestOption func(req *http.Request)
 
+// ----- Client ---------------------------------------------------
+
 // Client is the http client wrapper
 type Client struct {
-	Client             *http.Client
 	BaseURL            string
+	Client             *http.Client
 	HTTPRequestOptions []HTTPRequestOption
+	Authorization      ClientAuthorization
+}
+
+type ClientAuthorization struct {
+	CognitoIdentityProvider *cognito.CognitoIdentityProvider
+	ClientID                string
+	UserPoolID              string
+	Username                string
+	Password                string
 }
 
 // Request represents an outgoing GraphQL request
@@ -30,29 +44,84 @@ type Request struct {
 	OperationName string                 `json:"operationName,omitempty"`
 }
 
+// ----- Client Initialization Options ----------------------------
+
+type ClientOptions struct {
+	HTTPClient           *http.Client
+	HTTPRequestOptions   []HTTPRequestOption
+	BaseURL              string
+	AuthorizationOptions ClientAuthorizationOptions
+}
+
+type ClientAuthorizationOptions struct {
+	Session    *session.Session
+	ClientID   string
+	UserPoolID string
+	Username   string
+	Password   string
+}
+
+// ----- Client Constructor ----------------------------------------
+
 // NewClient creates a new http client wrapper
-func NewClient(client *http.Client, baseURL string, options ...HTTPRequestOption) *Client {
+func NewClient(options ClientOptions) *Client {
 	return &Client{
-		Client:             client,
-		BaseURL:            baseURL,
-		HTTPRequestOptions: options,
+		Client:             options.HTTPClient,
+		HTTPRequestOptions: options.HTTPRequestOptions,
+		BaseURL:            options.BaseURL,
+		Authorization: ClientAuthorization{
+			CognitoIdentityProvider: cognito.New(options.AuthorizationOptions.Session),
+			UserPoolID:              options.AuthorizationOptions.UserPoolID,
+			ClientID:                options.AuthorizationOptions.ClientID,
+			Username:                options.AuthorizationOptions.Username,
+			Password:                options.AuthorizationOptions.Password,
+		},
 	}
 }
 
 func (c *Client) newRequest(ctx context.Context, operationName, query string, vars map[string]interface{}, httpRequestOptions []HTTPRequestOption) (*http.Request, error) {
+
+	// Create request object
+	// Fill query
+	// Fill variables
 	r := &Request{
 		Query:     query,
 		Variables: vars,
 	}
 
+	// Marshal request body
+	// Exit on error
 	requestBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, xerrors.Errorf("encode: %w", err)
 	}
 
+	// Create new request
+	// Exit on error
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, xerrors.Errorf("create request struct failed: %w", err)
+	}
+
+	// Login with cognito admin credentials
+	// Exit on error
+	login, err := c.Authorization.CognitoIdentityProvider.AdminInitiateAuth(&cognito.AdminInitiateAuthInput{
+		AuthFlow:   aws.String("ADMIN_USER_PASSWORD_AUTH"),
+		ClientId:   &c.Authorization.ClientID,
+		UserPoolId: &c.Authorization.UserPoolID,
+		AuthParameters: map[string]*string{
+			"USERNAME": aws.String(c.Authorization.Username),
+			"PASSWORD": aws.String(c.Authorization.Password),
+		},
+	})
+	if err != nil {
+		return nil, xerrors.Errorf("failed to login : %w", err)
+	}
+
+	// If authentication result is successful and id token can be parsed
+	// Add in authentication header
+	if login != nil && login.AuthenticationResult != nil && login.AuthenticationResult.IdToken != nil {
+		req.Header.Add("Authorization", "Bearer "+*login.AuthenticationResult.IdToken)
 	}
 
 	for _, httpRequestOption := range c.HTTPRequestOptions {
@@ -109,6 +178,7 @@ func (c *Client) Post(ctx context.Context, operationName, query string, respData
 	if err != nil {
 		return xerrors.Errorf("don't create request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Accept", "application/json; charset=utf-8")
 

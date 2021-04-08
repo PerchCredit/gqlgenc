@@ -252,7 +252,12 @@ func (c *Config) loadRemoteSchema(ctx context.Context) (*ast.Schema, error) {
 			req.Header.Set(key, value)
 		}
 	}
-	gqlclient := client.NewClient(http.DefaultClient, c.Endpoint.URL, addHeader)
+
+	gqlclient := client.NewClient(client.ClientOptions{
+		HTTPClient:         http.DefaultClient,
+		BaseURL:            c.Endpoint.URL,
+		HTTPRequestOptions: []client.HTTPRequestOption{addHeader},
+	})
 
 	var res introspection.Query
 	if err := gqlclient.Post(ctx, "Query", introspection.Introspection, &res, nil); err != nil {
