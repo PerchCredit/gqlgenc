@@ -2,8 +2,6 @@ model:
   filename: ./gen/models_gen.go
 client:
   filename: ./gen/client.go
-schema:
-  - testdata/cfg/glob/**/*.graphql
 endpoint:
   url: https://stage.getperch.app
 query:

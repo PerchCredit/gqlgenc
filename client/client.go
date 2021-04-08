@@ -66,17 +66,26 @@ type ClientAuthorizationOptions struct {
 
 // NewClient creates a new http client wrapper
 func NewClient(options ClientOptions) *Client {
+
+	// Create base client authorization
+	authorization := ClientAuthorization{
+		UserPoolID: options.AuthorizationOptions.UserPoolID,
+		ClientID:   options.AuthorizationOptions.ClientID,
+		Username:   options.AuthorizationOptions.Username,
+		Password:   options.AuthorizationOptions.Password,
+	}
+
+	// If authorization options is provided
+	// Fill authorization
+	if options.AuthorizationOptions.Session != nil {
+		authorization.CognitoIdentityProvider = cognito.New(options.AuthorizationOptions.Session)
+	}
+
 	return &Client{
 		Client:             options.HTTPClient,
 		HTTPRequestOptions: options.HTTPRequestOptions,
 		BaseURL:            options.BaseURL,
-		Authorization: ClientAuthorization{
-			CognitoIdentityProvider: cognito.New(options.AuthorizationOptions.Session),
-			UserPoolID:              options.AuthorizationOptions.UserPoolID,
-			ClientID:                options.AuthorizationOptions.ClientID,
-			Username:                options.AuthorizationOptions.Username,
-			Password:                options.AuthorizationOptions.Password,
-		},
+		Authorization:      authorization,
 	}
 }
 
