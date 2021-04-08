@@ -12,6 +12,7 @@ import (
 	session "github.com/aws/aws-sdk-go/aws/session"
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/perchcredit/gqlgenc/graphqljson"
+	"github.com/perchcredit/gqlgenc/introspection"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"golang.org/x/xerrors"
 )
@@ -103,27 +104,33 @@ func (c *Client) newRequest(ctx context.Context, operationName, query string, va
 		return nil, xerrors.Errorf("create request struct failed: %w", err)
 	}
 
-	// Login with cognito admin credentials
-	// Exit on error
-	login, err := c.Authorization.CognitoIdentityProvider.AdminInitiateAuth(&cognito.AdminInitiateAuthInput{
-		AuthFlow:   aws.String("ADMIN_USER_PASSWORD_AUTH"),
-		ClientId:   &c.Authorization.ClientID,
-		UserPoolId: &c.Authorization.UserPoolID,
-		AuthParameters: map[string]*string{
-			"USERNAME": aws.String(c.Authorization.Username),
-			"PASSWORD": aws.String(c.Authorization.Password),
-		},
-	})
-	if err != nil {
-		return nil, xerrors.Errorf("failed to login : %w", err)
+	// If query is not introspection query
+	// Add appropriate authorization headers
+	if query != introspection.Introspection {
+
+		// Login with cognito admin credentials
+		// Exit on error
+		login, err := c.Authorization.CognitoIdentityProvider.AdminInitiateAuth(&cognito.AdminInitiateAuthInput{
+			AuthFlow:   aws.String("ADMIN_USER_PASSWORD_AUTH"),
+			ClientId:   &c.Authorization.ClientID,
+			UserPoolId: &c.Authorization.UserPoolID,
+			AuthParameters: map[string]*string{
+				"USERNAME": aws.String(c.Authorization.Username),
+				"PASSWORD": aws.String(c.Authorization.Password),
+			},
+		})
+		if err != nil {
+			return nil, xerrors.Errorf("failed to login : %w", err)
+		}
+
+		// If authentication result is successful and id token can be parsed
+		// Add in authentication header
+		if login != nil && login.AuthenticationResult != nil && login.AuthenticationResult.IdToken != nil {
+			req.Header.Add("Authorization", "Bearer "+*login.AuthenticationResult.IdToken)
+		}
 	}
 
-	// If authentication result is successful and id token can be parsed
-	// Add in authentication header
-	if login != nil && login.AuthenticationResult != nil && login.AuthenticationResult.IdToken != nil {
-		req.Header.Add("Authorization", "Bearer "+*login.AuthenticationResult.IdToken)
-	}
-
+	// Add HTTP Options
 	for _, httpRequestOption := range c.HTTPRequestOptions {
 		httpRequestOption(req)
 	}
