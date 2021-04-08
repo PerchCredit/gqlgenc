@@ -18,8 +18,32 @@ type Client struct {
 	Client *client.Client
 }
 
-func NewClient(cli *http.Client, baseURL string, options ...client.HTTPRequestOption) *Client {
-	return &Client{Client: client.NewClient(cli, baseURL, options...)}
+type ClientOptions struct {
+	HTTPClient           *http.Client
+	BaseURL              string
+	AuthorizationOptions ClientAuthorizationOptions
+}
+
+type ClientAuthorizationOptions struct {
+	Session    *session.Session
+	ClientID   string
+	UserPoolID string
+	Username   string
+	Password   string
+}
+
+func NewClient(options ClientOptions) *Client {
+	return &Client{Client: client.NewClient(client.ClientOptions{
+		HTTPClient: options.HTTPClient,
+		BaseURL:    options.BaseURL,
+		AuthorizationOptions: client.ClientAuthorizationOptions{
+			Session:    options.AuthorizationOptions.Session,
+			ClientID:   options.AuthorizationOptions.ClientID,
+			UserPoolID: options.AuthorizationOptions.UserPoolID,
+			Username:   options.AuthorizationOptions.Username,
+			Password:   options.AuthorizationOptions.Password,
+		},
+	})}
 }
 
 type {{ .Query.Name | go }} {{ .Query.Type | ref }}
